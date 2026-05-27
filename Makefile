@@ -21,9 +21,36 @@ DAEMONS := controld streamd utild
 LOG_DIR := ./ipc_logs
 TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
 
+
+# =============================================
+# Mockup: Example daemons using IPC in /tmp/
+# =============================================
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -g
+LDFLAGS =
+
 # Create log directory
 $(LOG_DIR):
 	mkdir -p $(LOG_DIR)
+
+controld: controld.o
+	$(CC) $(CFLAGS) -o controld controld.o $(LDFLAGS)
+
+streamd: streamd.o
+	$(CC) $(CFLAGS) -o streamd streamd.o $(LDFLAGS)
+
+utild: utild.o
+	$(CC) $(CFLAGS) -o utild utild.o $(LDFLAGS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+all-daemons: controld streamd utild
+
+run: all-daemons
+	./controld
+
+.PHONY: all-daemons run
 
 # =============================================
 # Phase 1: Reconnaissance
@@ -124,6 +151,7 @@ analysis: $(LOG_DIR)
 clean:
 	rm -rf $(LOG_DIR)/*.bt $(LOG_DIR)/*.pid
 	@echo "Cleaned logs and scripts (sockets untouched)"
+	rm -f *.o controld streamd utild /tmp/controld /tmp/streamd /tmp/utild /tmp/streamd.log
 
 stop-taps:
 	@echo "Stopping taps..."
@@ -145,6 +173,6 @@ help:
 	@echo "  stop-taps	 - Kill running socat taps"
 	@echo "  all		 - recon + ebpf"
 
-all: recon ebpf integrate
+all: controld streamd utild recon ebpf integrate
 
 # End of Makefile
