@@ -1,14 +1,20 @@
-#include <linux/uio.h>
-#include <linux/socket.h>
-
-kprobe:unix_stream_sendmsg
+tracepoint:syscalls:sys_enter_write
+/comm == "controld" ||
+ comm == "streamd" ||
+ comm == "utild"/
 {
-	$msg = (struct msghdr *)arg1;
-        // first iovec from iterator
-        $iov = (struct iovec *)$msg->msg_iter.__iov;
-        $base = $iov->iov_base;
-        $len = $iov->iov_len;
+    $len = args->count;
+    $dump_len = $len > 128 ? 128 : $len;
 
-        printf("[%s] PID:%d COMM:%s len:%d\n", strftime("%H:%M:%S", nsecs), pid, comm, $len);
-	print(buf($base, $len > 64 ? 64 : $len));
+    printf("\n[%s] PID:%d COMM:%s len:%d\n",
+        strftime("%H:%M:%S", nsecs),
+        pid,
+        comm,
+        $len);
+
+    printf("HEX:\n");
+    print(buf(args->buf, $dump_len));
+
+    printf("ASCII:\n");
+    printf("%r\n", buf(args->buf, $dump_len));
 }

@@ -1,3 +1,0 @@
-[submodule "tools/ncc_ebpf"]
-	path = tools/ncc_ebpf
-	url = https://github.com/nccgroup/ebpf.git
