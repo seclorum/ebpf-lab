@@ -1,0 +1,20 @@
+tracepoint:syscalls:sys_enter_write
+/comm == "controld" ||
+ comm == "streamd" ||
+ comm == "utild"/
+{
+    $len = args->count;
+    $dump_len = $len > 128 ? 128 : $len;
+
+    printf("\n[%s] PID:%d COMM:%s len:%d\n",
+        strftime("%H:%M:%S", nsecs),
+        pid,
+        comm,
+        $len);
+
+    printf("HEX:\n");
+    print(buf(args->buf, $dump_len));
+
+    printf("ASCII:\n");
+    printf("%r\n", buf(args->buf, $dump_len));
+}

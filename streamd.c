@@ -8,8 +8,8 @@
 #include <signal.h>
 #include <fcntl.h>
 
-#define STREAM_SOCKET "/tmp/streamd"
-#define LOG_FILE "/tmp/streamd.log"
+#define STREAM_SOCKET "/tmp/ebpf_lab/streamd"
+#define LOG_FILE "/tmp/ebpf_lab/ipc_logs/streamd.log"
 
 int running = 1;
 double interval = 1.0; // seconds
@@ -90,7 +90,7 @@ int main() {
             
             log = fopen(LOG_FILE, "a");
             if (log) {
-                fprintf(log, "[%s: stream message]\n", datetime);
+                fprintf(log, "[%s: stream message, interval %.2f]\n", datetime, interval);
                 fclose(log);
             }
         }

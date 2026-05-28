@@ -8,8 +8,8 @@
 #include <signal.h>
 #include <fcntl.h>
 
-#define UTIL_SOCKET "/tmp/utild"
-#define LOG_FILE "/tmp/streamd.log"
+#define UTIL_SOCKET "/tmp/ebpf_lab/utild"
+#define LOG_FILE "/tmp/ebpf_lab/ipc_logs/streamd.log"
 
 int running = 1;
 
