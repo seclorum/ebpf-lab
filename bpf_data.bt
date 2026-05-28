@@ -1,0 +1,14 @@
+#include <linux/uio.h>
+#include <linux/socket.h>
+
+kprobe:unix_stream_sendmsg
+{
+	$msg = (struct msghdr *)arg1;
+        // first iovec from iterator
+        $iov = (struct iovec *)$msg->msg_iter.__iov;
+        $base = $iov->iov_base;
+        $len = $iov->iov_len;
+
+        printf("[%s] PID:%d COMM:%s len:%d\n", strftime("%H:%M:%S", nsecs), pid, comm, $len);
+	print(buf($base, $len > 64 ? 64 : $len));
+}

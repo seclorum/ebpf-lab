@@ -1,0 +1,6 @@
+tracepoint:syscalls:sys_enter_connect,
+tracepoint:syscalls:sys_enter_accept4 {
+	if (str(args->addr) ~ /control0|stream0|util0/) {
+		printf("[%s] %s PID:%d COMM:%s\n", strftime("%H:%M:%S"), probe, pid, comm);
+	}
+}

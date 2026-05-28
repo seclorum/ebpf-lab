@@ -1,7 +1,7 @@
 #
-# Purpose: Provide Instrumentation of IPC occurring on multiple domain socket filenodes in /tmp, e.g.
+# Purpose: Provide Instrumentation of IPC occurring on multiple domain socket filenodes in /tmp/ebpf_lab, e.g.
 #
-#  /tmp/(controld/streamd/utild)=
+#  /tmp/ebpf_lab/(controld/streamd/utild)=
 #
 # Targets are intended for an analysis workflow 
 #
@@ -16,14 +16,14 @@
 #
 
 SHELL := /bin/bash
-SOCKETS := /tmp/control0 /tmp/stream0 /tmp/util0
+SOCKETS := /tmp/ebpf_lab/controld /tmp/ebpf_lab/streamd /tmp/ebpf_lab/utild
 DAEMONS := controld streamd utild
-LOG_DIR := ./ipc_logs
+LOG_DIR := /tmp/ebpf_lab/ipc_logs
 TIMESTAMP := $(shell date +%Y%m%d_%H%M%S)
 
 
 # =============================================
-# Mockup: Example daemons using IPC in /tmp/
+# Mockup: Example daemons using IPC in /tmp/ebpf_lab/
 # =============================================
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -g
@@ -31,7 +31,7 @@ LDFLAGS =
 
 # Create log directory
 $(LOG_DIR):
-	mkdir -p $(LOG_DIR)
+	mkdir -p $(LOG_DIR) /tmp/ebpf_lab/
 
 controld: controld.o
 	$(CC) $(CFLAGS) -o controld controld.o $(LDFLAGS)
@@ -47,10 +47,10 @@ utild: utild.o
 
 all-daemons: controld streamd utild
 
-run: all-daemons
+run: $(LOG_DIR) all-daemons
 	./controld
 
-.PHONY: all-daemons run
+.PHONY: $(LOG_DIR) all-daemons run
 
 # =============================================
 # Phase 1: Reconnaissance
@@ -59,7 +59,7 @@ run: all-daemons
 recon: $(LOG_DIR)
 	@echo "=== Phase 1: Reconnaissance ==="
 	@echo "Listing sockets and processes..."
-	lsof +E -U | grep -E '/tmp/(control|stream|util)0' | tee $(LOG_DIR)/recon_lsof_$(TIMESTAMP).log
+	lsof +E -U | grep -E '/tmp/ebpf_lab/(control|stream|util)0' | tee $(LOG_DIR)/recon_lsof_$(TIMESTAMP).log
 	ss -lxp | grep -E 'control|stream|util' | tee -a $(LOG_DIR)/recon_ss_$(TIMESTAMP).log
 	@echo "Unix sockets:"
 	cat /proc/net/unix | grep -E 'control|stream|util' | tee $(LOG_DIR)/recon_unix_$(TIMESTAMP).log
@@ -69,40 +69,12 @@ recon: $(LOG_DIR)
 # =============================================
 # Phase 2: Passive Kernel Instrumentation (eBPF)
 # =============================================
-.PHONY: ebpf unixdump bpftrace
-ebpf: unixdump bpftrace
-
-unixdump: $(LOG_DIR)
-	@echo "=== Phase 2: unixdump (eBPF) ==="
-	@if [ ! -d unixdump ]; then \
-		echo "Cloning unixdump..."; \
-		git clone https://github.com/nccgroup/unixdump.git || echo "Already cloned or failed"; \
-	fi
-	@cd unixdump && make || echo "Build may require manual steps"
-	@echo "Run manually for full capture (example):"
-	@echo "sudo ./unixdump/unixdump -s '$(SOCKETS)' -b -o $(LOG_DIR)/unixdump_$(TIMESTAMP).pcapng"
-	@echo "Or with hex: sudo ./unixdump/unixdump -s '$(SOCKETS)' | tee $(LOG_DIR)/unixdump_$(TIMESTAMP).log"
+.PHONY: ebpf bpftrace
+ebpf: bpftrace
 
 bpftrace: $(LOG_DIR)
 	@echo "=== Phase 2: bpftrace scripts ==="
-	@cat > $(LOG_DIR)/bpf_connect.bt << 'EOF'
-	tracepoint:syscalls:sys_enter_connect,
-	tracepoint:syscalls:sys_enter_accept4 {
-		if (str(args->addr) ~ /control0|stream0|util0/) {
-			printf("[%s] %s PID:%d COMM:%s\n", strftime("%H:%M:%S"), probe, pid, comm);
-		}
-	}
-	EOF
-	@cat > $(LOG_DIR)/bpf_data.bt << 'EOF'
-	kprobe:unix_stream_sendmsg,
-	kprobe:unix_dgram_sendmsg,
-	kprobe:unix_stream_recvmsg {
-		$len = arg2;
-		printf("[%s] %s PID:%d COMM:%s len:%d\n", strftime("%H:%M:%S"), probe, pid, comm, $len);
-	}
-	EOF
-	@echo "bpftrace scripts written to $(LOG_DIR)/"
-	@echo "Usage: sudo bpftrace $(LOG_DIR)/bpf_data.bt"
+	@sudo bpftrace bpf_data.bt
 
 # =============================================
 # Phase 3: Tap/Proxy Techniques
@@ -115,13 +87,18 @@ socat-tap: $(LOG_DIR)
 	@for s in $(SOCKETS); do \
 		base=$$(basename $$s); \
 		real="$${s}.real"; \
+		echo "Attempting tap of $$s (real: $$real)";\
 		if [ -S "$$s" ] && [ ! -S "$$real" ]; then \
 			echo "Tapping $$s -> $$real"; \
 			sudo mv "$$s" "$$real" || echo "Move failed for $$s"; \
-			sudo socat UNIX-LISTEN:"$$s",mode=777,reuseaddr,fork \
-				UNIX-CONNECT:"$$real" -x -v \
+			echo socat -x -v UNIX-LISTEN:"$$s",mode=777,reuseaddr,unlink-early,fork \
+				UNIX-CONNECT:"$$real"; \
+			sudo socat -x -v UNIX-LISTEN:"$$s",mode=777,reuseaddr,unlink-early,fork \
+				UNIX-CONNECT:"$$real" \
 				> $(LOG_DIR)/tap_$${base}_$(TIMESTAMP).log 2>&1 & \
 			echo "$$!" > $(LOG_DIR)/tap_$${base}.pid; \
+		else \
+			echo "Not tapping $$s (real: $$real)";\
 		fi; \
 	done
 	@echo "Socat taps started. Check logs in $(LOG_DIR)/"
@@ -151,21 +128,38 @@ analysis: $(LOG_DIR)
 clean:
 	rm -rf $(LOG_DIR)/*.bt $(LOG_DIR)/*.pid
 	@echo "Cleaned logs and scripts (sockets untouched)"
-	rm -f *.o controld streamd utild /tmp/controld /tmp/streamd /tmp/utild /tmp/streamd.log
+	rm -f *.o controld streamd utild /tmp/ebpf_lab/controld /tmp/ebpf_lab/streamd /tmp/ebpf_lab/utild /tmp/ebpf_lab/streamd.log \
+			/tmp/ebpf_lab/controld.real /tmp/ebpf_lab/streamd.real /tmp/ebpf_lab/utild.real
+
+control-start:
+	 @echo -n "start" | socat - UNIX-CONNECT:/tmp/ebpf_lab/controld
+
+control-stop:
+	 @echo -n "stop" | socat - UNIX-CONNECT:/tmp/ebpf_lab/controld
+
+control-faster:
+	 @echo -n "faster" | socat - UNIX-CONNECT:/tmp/ebpf_lab/controld
+
+control-slower:
+	 @echo -n "slower" | socat - UNIX-CONNECT:/tmp/ebpf_lab/controld
+
+monitor-logs:
+	tail -F -n 100 $(LOG_DIR)/* 2>/dev/null | awk '{ printf "\033[1;36m%s\033[0m: %s\n", FILENAME, $$0 }'
 
 stop-taps:
 	@echo "Stopping taps..."
 	@for pidfile in $(LOG_DIR)/*.pid; do \
 		if [ -f $$pidfile ]; then \
+			echo "**** killing $$(cat $$pidfile) ..."; \
 			sudo kill $$(cat $$pidfile) 2>/dev/null || true; \
 		fi; \
 	done
-	@echo "Restore original sockets manually if needed: mv /tmp/*.real /tmp/*0"
+	@echo "Restore original sockets manually if needed: mv /tmp/ebpf_lab/*.real /tmp/ebpf_lab/*0"
 
 help:
 	@echo "Available targets:"
 	@echo "  recon		 - Phase 1: Discovery"
-	@echo "  ebpf		 - Phase 2: eBPF (unixdump + bpftrace)"
+	@echo "  ebpf		 - Phase 2: eBPF (bpftrace)"
 	@echo "  tap		 - Phase 3: Socat proxies"
 	@echo "  integrate	 - Phase 4: Combined setup"
 	@echo "  analysis	 - Phase 4: Log correlation & hex"

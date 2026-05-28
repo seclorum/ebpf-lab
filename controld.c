@@ -8,9 +8,9 @@
 #include <sys/wait.h>
 #include <errno.h>
 
-#define CONTROL_SOCKET "/tmp/controld"
-#define STREAM_SOCKET "/tmp/streamd"
-#define UTIL_SOCKET "/tmp/utild"
+#define CONTROL_SOCKET "/tmp/ebpf_lab/controld"
+#define STREAM_SOCKET "/tmp/ebpf_lab/streamd"
+#define UTIL_SOCKET "/tmp/ebpf_lab/utild"
 
 pid_t pid_stream = -1;
 pid_t pid_util = -1;
