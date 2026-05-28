@@ -69,19 +69,23 @@ recon: $(LOG_DIR)
 # =============================================
 # Phase 2: Passive Kernel Instrumentation (eBPF)
 # =============================================
-.PHONY: ebpf unixdump bpftrace
-ebpf: unixdump bpftrace
+.PHONY: ebpf tools-install bpftrace
+ebpf: tools-install bpftrace
 
-unixdump: $(LOG_DIR)
-	@echo "=== Phase 2: unixdump (eBPF) ==="
+venv-setup:
+	@echo "=== Note! About to \"python3 -m venv .venv_epf-lab\""
+	@python3 -m venv .venv_epf-lab
+
+# Note! Assumes "python3 -m venv .venv_epf-lab"
+tools-install: $(LOG_DIR) venv-setup
+	@echo "=== Tools: unixdump (for eBPF) ==="
 	@if [ ! -d unixdump ]; then \
-		echo "Cloning unixdump..."; \
-		git clone https://github.com/nccgroup/unixdump.git || echo "Already cloned or failed"; \
+		. .venv_epf-lab/bin/activate && pip3 install unixdump; \
 	fi
-	@cd unixdump && make || echo "Build may require manual steps"
-	@echo "Run manually for full capture (example):"
-	@echo "sudo ./unixdump/unixdump -s '$(SOCKETS)' -b -o $(LOG_DIR)/unixdump_$(TIMESTAMP).pcapng"
-	@echo "Or with hex: sudo ./unixdump/unixdump -s '$(SOCKETS)' | tee $(LOG_DIR)/unixdump_$(TIMESTAMP).log"
+
+unixdump:
+	#@sudo unixdump -s '$(SOCKETS)' -b -o $(LOG_DIR)/unixdump_$(TIMESTAMP).pcapng
+	@sudo unixdump -s '$(SOCKETS)' | tee $(LOG_DIR)/unixdump_$(TIMESTAMP).log
 
 bpftrace: $(LOG_DIR)
 	@echo "=== Phase 2: bpftrace scripts ==="
