@@ -69,8 +69,23 @@ recon: $(LOG_DIR)
 # =============================================
 # Passive Kernel Instrumentation (eBPF)
 # =============================================
-.PHONY: ebpf bpftrace
-ebpf: bpftrace
+.PHONY: ebpf tools-install bpftrace
+ebpf: tools-install bpftrace
+
+venv-setup:
+	@echo "=== Note! About to \"python3 -m venv .venv_epf-lab\""
+	@python3 -m venv .venv_epf-lab
+
+# Note! Assumes "python3 -m venv .venv_epf-lab"
+tools-install: $(LOG_DIR) venv-setup
+	@echo "=== Tools: unixdump (for eBPF) ==="
+	@if [ ! -d unixdump ]; then \
+		. .venv_epf-lab/bin/activate && pip3 install unixdump; \
+	fi
+
+unixdump:
+	#@sudo unixdump -s '$(SOCKETS)' -b -o $(LOG_DIR)/unixdump_$(TIMESTAMP).pcapng
+	@sudo unixdump -s '$(SOCKETS)' | tee $(LOG_DIR)/unixdump_$(TIMESTAMP).log
 
 bpftrace: $(LOG_DIR)
 	@echo "=== bpftrace scripts ==="
