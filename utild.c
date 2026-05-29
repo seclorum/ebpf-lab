@@ -49,7 +49,7 @@ void dump_log() {
         printf("%s", line);
     }
     fclose(f);
-    printf("[utild] === End of dump ===\n\n");
+    printf("[utild] === End of dump task by utild ===\n\n");
 }
 
 int main() {
