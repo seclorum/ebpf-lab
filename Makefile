@@ -53,11 +53,11 @@ run: $(LOG_DIR) all-daemons
 .PHONY: $(LOG_DIR) all-daemons run
 
 # =============================================
-# Phase 1: Reconnaissance
+# Reconnaissance
 # =============================================
 .PHONY: recon
 recon: $(LOG_DIR)
-	@echo "=== Phase 1: Reconnaissance ==="
+	@echo "=== Reconnaissance ==="
 	@echo "Listing sockets and processes..."
 	lsof +E -U | grep -E '/tmp/ebpf_lab/(control|stream|util)0' | tee $(LOG_DIR)/recon_lsof_$(TIMESTAMP).log
 	ss -lxp | grep -E 'control|stream|util' | tee -a $(LOG_DIR)/recon_ss_$(TIMESTAMP).log
@@ -67,23 +67,23 @@ recon: $(LOG_DIR)
 	@echo "Recon complete. Logs in $(LOG_DIR)/"
 
 # =============================================
-# Phase 2: Passive Kernel Instrumentation (eBPF)
+# Passive Kernel Instrumentation (eBPF)
 # =============================================
 .PHONY: ebpf bpftrace
 ebpf: bpftrace
 
 bpftrace: $(LOG_DIR)
-	@echo "=== Phase 2: bpftrace scripts ==="
+	@echo "=== bpftrace scripts ==="
 	@sudo bpftrace bpf_data.bt
 
 # =============================================
-# Phase 3: Tap/Proxy Techniques
+# Tap/Proxy Techniques
 # =============================================
 .PHONY: tap socat-tap
 tap: socat-tap
 
 socat-tap: $(LOG_DIR)
-	@echo "=== Phase 3: Socat Tap/Proxy ==="
+	@echo "=== Socat Tap/Proxy ==="
 	@for s in $(SOCKETS); do \
 		base=$$(basename $$s); \
 		real="$${s}.real"; \
@@ -103,18 +103,28 @@ socat-tap: $(LOG_DIR)
 	done
 	@echo "Socat taps started. Check logs in $(LOG_DIR)/"
 
+stop-taps:
+	@echo "Stopping taps..."
+	@for pidfile in $(LOG_DIR)/*.pid; do \
+		if [ -f $$pidfile ]; then \
+			echo "**** killing $$(cat $$pidfile) ..."; \
+			sudo kill $$(cat $$pidfile) 2>/dev/null || true; \
+		fi; \
+	done
+	@echo "Restore original sockets manually if needed: mv /tmp/ebpf_lab/*.real /tmp/ebpf_lab/*0"
+
 # =============================================
-# Phase 4: Holistic Integration & Analysis
+# Holistic Integration & Analysis
 # =============================================
 .PHONY: integrate analysis
 integrate: recon ebpf
-	@echo "=== Phase 4: Integration ==="
+	@echo "=== Integration ==="
 	@echo "Starting combined observation..."
 	@sudo bpftrace -c "sleep 5" $(LOG_DIR)/bpf_data.bt > $(LOG_DIR)/integrated_$(TIMESTAMP).log 2>&1 &
 	@echo "Integration scripts launched. Use 'make analysis' for processing."
 
 analysis: $(LOG_DIR)
-	@echo "=== Phase 4: Analysis ==="
+	@echo "=== Analysis ==="
 	@echo "Correlating logs..."
 	@find $(LOG_DIR) -name "*.log" -exec echo "=== {} ===" \; -exec head -n 20 {} \; | tee $(LOG_DIR)/summary_$(TIMESTAMP).txt
 	@echo "Hex dump example (first 10 lines of data logs):"
@@ -146,23 +156,13 @@ control-slower:
 monitor-logs:
 	tail -F -n 100 $(LOG_DIR)/* 2>/dev/null | awk '{ printf "\033[1;36m%s\033[0m: %s\n", FILENAME, $$0 }'
 
-stop-taps:
-	@echo "Stopping taps..."
-	@for pidfile in $(LOG_DIR)/*.pid; do \
-		if [ -f $$pidfile ]; then \
-			echo "**** killing $$(cat $$pidfile) ..."; \
-			sudo kill $$(cat $$pidfile) 2>/dev/null || true; \
-		fi; \
-	done
-	@echo "Restore original sockets manually if needed: mv /tmp/ebpf_lab/*.real /tmp/ebpf_lab/*0"
-
 help:
 	@echo "Available targets:"
-	@echo "  recon		 - Phase 1: Discovery"
-	@echo "  ebpf		 - Phase 2: eBPF (bpftrace)"
-	@echo "  tap		 - Phase 3: Socat proxies"
-	@echo "  integrate	 - Phase 4: Combined setup"
-	@echo "  analysis	 - Phase 4: Log correlation & hex"
+	@echo "  recon		 - Discovery"
+	@echo "  ebpf		 - eBPF (bpftrace)"
+	@echo "  tap		 - Socat proxies"
+	@echo "  integrate	 - Combined setup"
+	@echo "  analysis	 - Log correlation & hex"
 	@echo "  clean		 - Remove generated files"
 	@echo "  stop-taps	 - Kill running socat taps"
 	@echo "  all		 - recon + ebpf"
